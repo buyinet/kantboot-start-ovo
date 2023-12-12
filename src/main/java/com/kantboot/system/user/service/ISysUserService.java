@@ -1,6 +1,7 @@
 package com.kantboot.system.user.service;
 
 import com.kantboot.system.user.domain.dto.SysUserInitInfoDTO;
+import com.kantboot.system.user.domain.dto.SysUserSaveDTOOfDtu;
 import com.kantboot.system.user.domain.dto.SysUserSearchDTO;
 import com.kantboot.system.user.domain.entity.SysUser;
 import com.kantboot.system.user.domain.entity.SysUserAttribute;
@@ -235,7 +236,7 @@ public interface ISysUserService {
     /**
      * 初始化个人信息
      */
-    void initSelfInfo(SysUserInitInfoDTO dto);
+    Map<String,Object> initSelfInfo(SysUserInitInfoDTO dto);
 
 
     PageResult getBodyData(PageParam<SysUserSearchDTO> pageParam);
@@ -255,5 +256,22 @@ public interface ISysUserService {
      * @param varCode 验证码（加密）
      */
     LoginVO securityPhoneRegisterWithVarCode(String phone, String password, String varCode);
+
+    /**
+     * 生成自身的直属码
+     */
+    Map<String,Object> generateSelfDirectCode();
+
+    /**
+     * 生成微信号
+     */
+    Map<String,Object> setWechat(String wechat);
+
+
+    // TODO 只针对那个dtu项目的修改与保存
+    /**
+     * 保存
+     */
+    Map<String,Object> saveOfDtu(SysUserSaveDTOOfDtu dto);
 
 }

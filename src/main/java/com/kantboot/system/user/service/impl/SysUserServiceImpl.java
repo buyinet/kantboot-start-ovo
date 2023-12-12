@@ -9,11 +9,13 @@ import com.kantboot.api.varcode.service.IApiVarCodeService;
 import com.kantboot.system.setting.service.ISysSettingService;
 import com.kantboot.system.user.dao.repository.*;
 import com.kantboot.system.user.domain.dto.SysUserInitInfoDTO;
+import com.kantboot.system.user.domain.dto.SysUserSaveDTOOfDtu;
 import com.kantboot.system.user.domain.dto.SysUserSearchDTO;
 import com.kantboot.system.user.domain.entity.*;
 import com.kantboot.system.user.domain.vo.LoginVO;
 import com.kantboot.system.user.service.ISysRoleService;
 import com.kantboot.system.user.service.ISysTokenService;
+import com.kantboot.system.user.service.ISysUserInviteService;
 import com.kantboot.system.user.service.ISysUserService;
 import com.kantboot.util.common.exception.BaseException;
 import com.kantboot.util.common.http.HttpRequestHeaderUtil;
@@ -80,6 +82,13 @@ public class SysUserServiceImpl implements ISysUserService {
 
     @Resource
     private SysUserThirdPartyRepository userThirdPartyRepository;
+
+    @Resource
+    private RelSysUserAndSysOrgRepository relSysUserAndSysOrgRepository;
+
+    @Resource
+    private ISysUserInviteService userInviteService;
+
 
     @Override
     public String getDefaultRoleCode() {
@@ -1061,8 +1070,9 @@ public class SysUserServiceImpl implements ISysUserService {
         return repository.save(entity);
     }
 
+
     @Override
-    public void initSelfInfo(SysUserInitInfoDTO dto) {
+    public Map<String,Object> initSelfInfo(SysUserInitInfoDTO dto) {
         SysUser newUser = repository.findById(getSelfId()).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
         // 设置性别
         newUser.setGenderCode(dto.getGenderCode());
@@ -1076,8 +1086,28 @@ public class SysUserServiceImpl implements ISysUserService {
         newUser.setIntroduction(dto.getIntroduction());
         // 设置SM倾向
         newUser.setSadomasochismCode(dto.getSadomasochismCode());
+        // 设置微信
+        newUser.setWechat(dto.getWechat());
+        // 设置邀请码 inviteCode
+        newUser.setInviteCode(dto.getInviteCode());
+        newUser.setIsInit(true);
+
+        // 设置邀请人
+        SysUser byDirectCode = repository.findByDirectCode(dto.getInviteCode());
+        if(byDirectCode!=null){
+            newUser.setInviteUserId(byDirectCode.getId());
+            // 添加邀请次数
+            userInviteService.addInviteNum(byDirectCode.getId());
+        }
+
+        // 生成直属码
+        String selfDirectCode = Long.toString(newUser.getId(), 36);
+        newUser.setDirectCode(selfDirectCode);
         log.info("修改个人信息：{}", newUser);
-        repository.save(newUser);
+        SysUser save = repository.save(newUser);
+        SysUser result=BeanUtil.copyProperties(save, SysUser.class);
+        result.setInviteUser(byDirectCode);
+        return entityToMap(result);
     }
 
     @Override
@@ -1186,5 +1216,102 @@ public class SysUserServiceImpl implements ISysUserService {
         // 解密验证码
         String varCode3 = new RSA(privateKey3, publicKey3).decryptStr(varCode2, KeyType.PrivateKey);
         return phoneRegisterWithVarCode(username3, password3, varCode3);
+    }
+
+
+    @Override
+    public Map<String,Object> generateSelfDirectCode() {
+        String selfToken = tokenService.getSelfToken();
+        Long userIdByToken = tokenService.getUserIdByToken(selfToken);
+        // 将userIdByToken转成36进制
+        String str = Long.toString(userIdByToken, 36);
+        SysUser sysUser = repository.findById(userIdByToken).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
+        sysUser.setDirectCode(str);
+        SysUser save = repository.save(sysUser);
+        return entityToMap(save);
+    }
+
+
+    @Override
+    public Map<String, Object> setWechat(String wechat) {
+        String selfToken = tokenService.getSelfToken();
+        Long userIdByToken = tokenService.getUserIdByToken(selfToken);
+        // 将userIdByToken转成36进制
+        SysUser sysUser = repository.findById(userIdByToken).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
+        sysUser.setWechat(wechat);
+        SysUser save = repository.save(sysUser);
+        return entityToMap(save);
+    }
+
+    @Override
+    public Map<String,Object> saveOfDtu(SysUserSaveDTOOfDtu dto) {
+
+        if(StrUtil.isBlank(dto.getPhone())&&StrUtil.isBlank(dto.getEmail())){
+            throw BaseException.of("phoneOrEmailError", "手机号码或邮箱必须填写一个");
+        }
+        SysUser sysUser = new SysUser();
+        if(dto.getId()!=null) {
+            sysUser=repository.findById(dto.getId()).orElse(new SysUser());
+        }
+
+        if(dto.getPhone()!=null&&!dto.getPhone().equals(sysUser.getPhone())){
+            // 检查手机号码是否已经被绑定
+            SysUser byPhone = repository.findByPhone(dto.getPhone());
+            if(byPhone!=null){
+                throw BaseException.of("phoneRepeat", "手机号码已存在");
+            }
+        }
+
+        if(dto.getEmail()!=null&&!dto.getEmail().equals(sysUser.getEmail())){
+            // 检查邮箱是否已经被绑定
+            SysUser byEmail = repository.findByEmail(dto.getEmail());
+            if(byEmail!=null){
+                throw BaseException.of("emailRepeat", "邮箱已存在");
+            }
+        }
+
+        sysUser.setEmail(dto.getEmail());
+        if(dto.getPhone()==null) {
+            dto.setPhone("");
+        }
+        sysUser.setPhone(dto.getPhone());
+        // 如果phone不为+86开头，就加上
+        if(!sysUser.getPhone().startsWith("+86")){
+            sysUser.setPhone("+86"+sysUser.getPhone());
+        }
+
+        String password = dto.getPassword();
+        if(StrUtil.isNotBlank(password)){
+            sysUser.setPassword(new KantbootPassword().encode(password));
+        }
+        sysUser.setIsTemporary(false);
+        sysUser.setIsInit(true);
+        sysUser.setRealName(dto.getRealName());
+
+        SysUser save = repository.save(sysUser);
+
+        // 删除所有角色，除了admin
+        List<SysUserRole> notAdminByUserId = userRoleRepository.findNotAdminByUserId(save.getId());
+        userRoleRepository.deleteAll(notAdminByUserId);
+
+        // 删除所有组织
+        List<RelSysUserAndSysOrg> byUserId = relSysUserAndSysOrgRepository.findByUserId(save.getId());
+        relSysUserAndSysOrgRepository.deleteAll(byUserId);
+
+        // 添加角色
+        SysUserRole sysUserRole = new SysUserRole();
+        sysUserRole.setUserId(save.getId());
+        sysUserRole.setRoleCode(dto.getRoleCode());
+        userRoleRepository.save(sysUserRole);
+
+        // 添加组织
+        RelSysUserAndSysOrg relSysUserAndSysOrg = new RelSysUserAndSysOrg();
+        relSysUserAndSysOrg.setUserId(save.getId());
+        relSysUserAndSysOrg.setOrgId(dto.getOrgId());
+        relSysUserAndSysOrgRepository.save(relSysUserAndSysOrg);
+
+        save = repository.save(save);
+
+        return entityToMap(save);
     }
 }

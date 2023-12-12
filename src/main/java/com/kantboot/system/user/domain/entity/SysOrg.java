@@ -5,26 +5,28 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.GenericGenerator;
-import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.io.Serializable;
 import java.util.Date;
 
-
 /**
- * 用户角色关联实体类
- * @author 方某方
+ * 组织架构表
  */
 @Entity
 @Getter
 @Setter
-@Table(name = "sys_user_role")
+@Table(name = "sys_org")
 @Accessors(chain = true)
 @EntityListeners(AuditingEntityListener.class)
-public class SysUserRole implements Serializable {
+@DynamicUpdate
+@DynamicInsert
+public class SysOrg implements Serializable {
 
     /**
      * 主键
@@ -35,43 +37,34 @@ public class SysUserRole implements Serializable {
     @Column(name = "id")
     private Long id;
 
-
     /**
-     * 用户id
+     * 组织名称
      */
-    @Column(name = "user_id")
-    private Long userId;
+    @Column(name = "t_name")
+    private String name;
 
     /**
-     * 角色编码
-     * 使用code，而不是id，是为了避免角色删除后，用户角色关联表中的角色id失效
+     * 上级部门id
      */
-    @Column(name = "role_code")
-    private String roleCode;
+    @Column(name = "parent_id")
+    private Long parentId;
 
     /**
-     * 关联角色
-     * 用角色表的code关联这个表的role_code
+     * 上级部门
      */
     @OneToOne
-    @JoinColumn(name = "role_code", referencedColumnName = "t_code", insertable = false, updatable = false)
-    private SysRole role;
-
-    /**
-     * 是否可见，默认可见
-     */
-    @Column(name = "visible")
-    private Boolean visible;
+    @JoinColumn(name = "parent_id", insertable = false, updatable = false)
+    private SysOrg parent;
 
     /**
      * 创建时间
      */
-    @CreatedBy
+    @CreatedDate
     @Column(name = "gmt_create")
     private Date gmtCreate;
 
     /**
-     * 修改时间
+     * 最后一次修改时间
      */
     @LastModifiedDate
     @Column(name = "gmt_modified")

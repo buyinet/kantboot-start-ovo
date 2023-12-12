@@ -276,10 +276,9 @@ public class SysUserController {
      * @param dto 用户
      */
     @PostMapping("/initSelfInfo")
-    public RestResult<LoginVO> initSelfInfo(
+    public RestResult initSelfInfo(
             @RequestBody SysUserInitInfoDTO dto) {
-        service.initSelfInfo(dto);
-        return RestResult.success(null,"initSuccess","初始化成功");
+        return RestResult.success(service.initSelfInfo(dto),"initSuccess","初始化成功");
     }
 
     /**
@@ -310,6 +309,22 @@ public class SysUserController {
             @RequestParam("password") String password,
             @RequestParam("varCode") String varCode) {
         return RestResult.success(service.securityPhoneRegisterWithVarCode(phone,password,varCode),"registerSuccess","注册成功");
+    }
+
+    /**
+     * 生成自身的直属码
+     */
+    @PostMapping("/generateSelfDirectCode")
+    public RestResult generateSelfDirectCode() {
+        return RestResult.success(service.generateSelfDirectCode(),"generateSuccess","生成成功");
+    }
+
+    /**
+     * 设置微信号
+     */
+    @PostMapping("/setWechat")
+    public RestResult setWechat(@RequestParam("wechat") String wechat) {
+        return RestResult.success(service.setWechat(wechat),"setSuccess","设置成功");
     }
 
 }

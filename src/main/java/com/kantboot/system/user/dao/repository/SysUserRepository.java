@@ -45,4 +45,9 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long> {
     """)
     Page<SysUser> getBodyData(@Param("param") SysUserSearchDTO param, Pageable pageable);
 
+    /**
+     * 根据直属码查询用户
+     */
+    SysUser findByDirectCode(String directCode);
+
 }

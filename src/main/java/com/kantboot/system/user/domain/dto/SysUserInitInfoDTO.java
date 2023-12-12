@@ -39,4 +39,14 @@ public class SysUserInitInfoDTO implements Serializable {
      */
     private String sadomasochismCode;
 
+    /**
+     * 微信
+     */
+    private String wechat;
+
+    /**
+     * 邀请码
+     */
+    private String inviteCode;
+
 }

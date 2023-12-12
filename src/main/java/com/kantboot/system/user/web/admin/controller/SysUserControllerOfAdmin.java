@@ -1,5 +1,6 @@
 package com.kantboot.system.user.web.admin.controller;
 
+import com.kantboot.system.user.domain.dto.SysUserSaveDTOOfDtu;
 import com.kantboot.system.user.domain.dto.SysUserSearchDTO;
 import com.kantboot.system.user.domain.entity.SysUser;
 import com.kantboot.system.user.service.ISysUserService;
@@ -53,5 +54,12 @@ public class SysUserControllerOfAdmin extends BaseAdminController<SysUser,Long> 
         return RestResult.success(null,"setSuccess","设置成功");
     }
 
+    /**
+     * saveOfDtu
+     */
+    @PostMapping("/saveOfDtu")
+    public RestResult saveOfDtu(@RequestBody SysUserSaveDTOOfDtu user) {
+        return RestResult.success(service.saveOfDtu(user),"saveSuccess","保存成功");
+    }
 
 }

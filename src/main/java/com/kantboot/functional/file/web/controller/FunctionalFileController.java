@@ -17,7 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
  * 用于管理文件的上传、下载、删除等
  */
 @RestController
-@RequestMapping("/functional-file/file")
+@RequestMapping("/functional-file-web/file")
 public class FunctionalFileController {
 
     @Resource

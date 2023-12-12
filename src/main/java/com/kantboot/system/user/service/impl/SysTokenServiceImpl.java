@@ -1,6 +1,7 @@
 package com.kantboot.system.user.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import com.kantboot.system.setting.service.ISysSettingService;
 import com.kantboot.system.user.dao.repository.SysTokenRepository;
 import com.kantboot.system.user.domain.entity.SysToken;
 import com.kantboot.system.user.service.ISysTokenService;
@@ -25,8 +26,8 @@ public class SysTokenServiceImpl implements ISysTokenService
     @Resource
     private SysTokenRepository repository;
 
-//    @DubboReference
-//    private ISysSettingRpcService settingRpcService;
+    @Resource
+    private ISysSettingService settingService;
 
     @Resource
     private RedisUtil redisUtil;
@@ -37,8 +38,7 @@ public class SysTokenServiceImpl implements ISysTokenService
     @Override
     @Cacheable(value = "sysToken::getTokenExpireTime")
     public String getTokenExpireTime() {
-//        return settingRpcService.getValue("user", "tokenExpireTime");
-        return "3600000";
+        return settingService.getValue("user", "tokenExpireTime");
     }
 
     @Override

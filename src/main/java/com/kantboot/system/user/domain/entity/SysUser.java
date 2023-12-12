@@ -13,6 +13,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -174,6 +175,25 @@ public class SysUser implements Serializable {
     @JoinColumn(name = "user_id",referencedColumnName = "id")
     private List<SysUserRole> roleList;
 
+    @Transient
+    private List<SysRole> roleListHas;
+
+    public List<SysRole> getRoleListHas() {
+        List<SysRole> roleListHas = new ArrayList<>();
+        if(roleList == null){
+            return new ArrayList<>();
+        }
+        for (SysUserRole sysUserRole : roleList) {
+            if (sysUserRole.getRole() != null) {
+                roleListHas.add(sysUserRole.getRole());
+            }
+        }
+        return roleListHas;
+    }
+
+
+
+
     /**
      * 属性
      */
@@ -189,6 +209,29 @@ public class SysUser implements Serializable {
     private SysUserOnline online;
 
     /**
+     * 关联rel_sys_user_and_sys_org表
+     */
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    private List<RelSysUserAndSysOrg> relOrgList;
+
+    @Transient
+    private List<SysOrg> orgList;
+
+    public List<SysOrg> getOrgList() {
+        List<SysOrg> orgList = new ArrayList<>();
+        if(relOrgList == null){
+            return new ArrayList<>();
+        }
+        for (RelSysUserAndSysOrg relSysUserAndSysOrg : relOrgList) {
+            if (relSysUserAndSysOrg.getOrg() != null) {
+                orgList.add(relSysUserAndSysOrg.getOrg());
+            }
+        }
+        return orgList;
+    }
+
+    /**
      * 性取向
      */
     @Column(name = "sexual_orientation")
@@ -200,5 +243,112 @@ public class SysUser implements Serializable {
     @Column(name = "sadomasochism_code")
     private String sadomasochismCode;
 
+    /**
+     * 真实姓名
+     */
+    @Column(name = "real_name")
+    private String realName;
+
+    /**
+     * 直属码
+     */
+    @Column(name = "direct_code")
+    private String directCode;
+
+    /**
+     * 邀请码
+     */
+    @Column(name = "invite_code")
+    private String inviteCode;
+
+    /**
+     * 邀请人id
+     */
+    @Column(name = "invite_user_id")
+    private Long inviteUserId;
+
+    // DTU项目需要的东西
+    /**
+     * orgId
+     */
+    @Transient
+    private Long orgId;
+
+    /**
+     * roleCode
+     */
+    @Transient
+    private String roleCode;
+
+    public Long getOrgId() {
+        // 如果没有组织，就返回null
+        if (this.getOrgList() == null || this.getOrgList().size() == 0) {
+            return null;
+        }
+        return this.getOrgList().get(0).getId();
+    }
+
+    public String getRoleCode() {
+        // 如果没有角色，就返回null
+        if (this.getRoleListHas() == null || this.getRoleListHas().size() == 0) {
+            return null;
+        }
+        return this.getRoleListHas().get(0).getCode();
+    }
+
+    // 以下是仿趣吧需要的参数
+    /**
+     * 微信号
+     */
+    @Column(name = "wechat")
+    private String wechat;
+
+    /**
+     * 绑定邀请人
+     */
+    @OneToOne
+    @JoinColumn(name = "invite_user_id",referencedColumnName = "id",insertable = false,updatable = false)
+    private SysUser inviteUser;
+
+    public SysUser getInviteUser() {
+        if(inviteUser == null){
+            return null;
+        }
+        inviteUser.setInviteUser(null);
+        return inviteUser;
+    }
+
+    /**
+     * 绑定邀请
+     */
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "id",referencedColumnName = "user_id",insertable = false,updatable = false)
+    private SysUserInvite invite;
+
+    /**
+     * 直接邀请人数
+     */
+    @Transient
+    private Long inviteCount;
+
+    /**
+     * 间接邀请人数
+     */
+    @Transient
+    private Long inviteCountIndirect;
+
+    public Long getInviteCount(){
+        if(getInvite() == null){
+            return 0L;
+        }
+        return getInvite().getInviteCount();
+    }
+
+    public Long getInviteCountIndirect(){
+        if(getInvite() == null){
+            return 0L;
+        }
+        return getInvite().getInviteCountIndirect();
+    }
 
 }
