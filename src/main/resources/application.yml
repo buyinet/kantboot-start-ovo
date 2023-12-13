@@ -49,7 +49,7 @@ spring:
         bytecode:
           use_reflection_optimizer: false
         dialect: org.hibernate.dialect.MySQL8Dialect
-    show-sql: true
+    show-sql: false
     jackson:
       date-format: yyyy-MM-dd HH:mm:ss
       time-zone: GMT+8

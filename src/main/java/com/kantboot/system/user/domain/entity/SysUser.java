@@ -351,4 +351,8 @@ public class SysUser implements Serializable {
         return getInvite().getInviteCountIndirect();
     }
 
+    @OneToMany
+    @JoinColumn(name = "user_id",referencedColumnName = "id")
+    private List<SysUserBalance> balanceList;
+
 }

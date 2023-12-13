@@ -2,10 +2,9 @@ package com.kantboot.system.user.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.asymmetric.KeyType;
-import cn.hutool.crypto.asymmetric.RSA;
 import com.kantboot.api.varcode.domain.entity.ApiVarCode;
 import com.kantboot.api.varcode.service.IApiVarCodeService;
+import com.kantboot.common.service.ICommonKantbootRsaService;
 import com.kantboot.system.setting.service.ISysSettingService;
 import com.kantboot.system.user.dao.repository.*;
 import com.kantboot.system.user.domain.dto.SysUserInitInfoDTO;
@@ -13,12 +12,13 @@ import com.kantboot.system.user.domain.dto.SysUserSaveDTOOfDtu;
 import com.kantboot.system.user.domain.dto.SysUserSearchDTO;
 import com.kantboot.system.user.domain.entity.*;
 import com.kantboot.system.user.domain.vo.LoginVO;
+import com.kantboot.system.user.event.UserInitEvent;
 import com.kantboot.system.user.service.ISysRoleService;
 import com.kantboot.system.user.service.ISysTokenService;
 import com.kantboot.system.user.service.ISysUserInviteService;
 import com.kantboot.system.user.service.ISysUserService;
+import com.kantboot.system.user.util.UserUtil;
 import com.kantboot.util.common.exception.BaseException;
-import com.kantboot.util.common.http.HttpRequestHeaderUtil;
 import com.kantboot.util.common.password.KantbootPassword;
 import com.kantboot.util.core.param.PageParam;
 import com.kantboot.util.core.redis.RedisUtil;
@@ -26,15 +26,13 @@ import com.kantboot.util.core.result.PageResult;
 import jakarta.annotation.Resource;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * 用户服务实现类
@@ -44,6 +42,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class SysUserServiceImpl implements ISysUserService {
+
+    private final ApplicationEventPublisher applicationEventPublisher;
+
+    public SysUserServiceImpl(ApplicationEventPublisher applicationEventPublisher) {
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
 
     /**
      * redis前缀
@@ -72,9 +76,6 @@ public class SysUserServiceImpl implements ISysUserService {
     private SysUserOnlineRepository onlineRepository;
 
     @Resource
-    private HttpRequestHeaderUtil httpRequestHeaderUtil;
-
-    @Resource
     private SysPermissionRoleRepository permissionRoleRepository;
 
     @Resource
@@ -89,93 +90,25 @@ public class SysUserServiceImpl implements ISysUserService {
     @Resource
     private ISysUserInviteService userInviteService;
 
+    @Resource
+    private SysTokenRepository tokenRepository;
+
+    @Resource
+    private ICommonKantbootRsaService kantbootRsaService;
+
+
 
     @Override
     public String getDefaultRoleCode() {
         return settingService.getValue("user", "defaultRoleCode");
     }
-
-    public Map<String, Object> entityToMap(SysUser entity) {
-        // 开始时间
-        long startTime = System.currentTimeMillis();
-        if(entity.getOnline()==null){
-            entity.setOnline(
-                    new SysUserOnline()
-                            .setOnline(false)
-                            .setUserId(entity.getId())
-                            .setOnlineStatusCode(SysUserOnline.ONLINE_STATUS_CODE_OFFLINE)
-            );
-        }
-
-        entity.setPassword(null);
-        Map<String, Object> result = BeanUtil.beanToMap(entity);
-
-        Map<String, Object> attributeMap = new HashMap<>();
-        List<SysUserAttribute> attributes = entity.getAttributeList();
-        if (attributes == null) {
-            attributes = new ArrayList<>();
-        }
-
-        for (SysUserAttribute attribute : attributes) {
-            List<String> detailValues = attribute.getDetailList().stream()
-                    .map(SysUserAttributeDetail::getValue)
-                    .collect(Collectors.toList());
-            attributeMap.put(attribute.getCode(), detailValues.isEmpty() ? attribute.getValue() : detailValues);
-        }
-        result.put("attr", attributeMap);
-
-        // 移除属性列表
-        entity.setAttributeList(null);
-
-        List<String> roleCodes = new ArrayList<>();
-        List<SysUserRole> roleList = entity.getRoleList();
-        if (roleList == null) {
-            roleList = new ArrayList<>();
-        }
-
-
-        roleList.forEach(role -> {
-            roleCodes.add(role.getRoleCode());
-            // 设置角色状态
-            result.put("isRole" + StrUtil.upperFirst(role.getRoleCode()), true);
-        });
-        result.put("roleCodes", roleCodes);
-
-        try{
-            result.put("gmtCreate", entity.getGmtCreate().getTime());
-            result.put("gmtModified", entity.getGmtModified().getTime());
-        }catch (Exception e){
-            result.put("gmtCreate", null);
-            result.put("gmtModified", null);
-        }
-        // 结束时间
-        long endTime = System.currentTimeMillis();
-        log.info("entityToMap耗时：{}ms", endTime - startTime);
-        return result;
-    }
-
-    private Map<String, Object> hideMap(SysUser vo) {
-        Map<String, Object> map = entityToMap(vo);
-
-        map.remove("username");
-        List<SysUserRole> roleList = vo.getRoleList();
-        List<SysUserRole> newRoleList = new ArrayList<>();
-        for (SysUserRole role : roleList) {
-            if(role.getVisible()!=null&&!role.getVisible()){
-                newRoleList.add(role);
-            }
-        }
-        map.remove("roleList");
-        map.put("roleCodes", newRoleList.stream().map(SysUserRole::getRoleCode).collect(Collectors.toList()));
-
-        return map;
-    }
+    
 
 
     @Override
     public Map<String, Object> getById(Long id) {
         SysUser sysUser = repository.findById(id).orElse(new SysUser());
-        return entityToMap(sysUser);
+        return UserUtil.entityToMap(sysUser);
     }
 
     @Override
@@ -233,7 +166,7 @@ public class SysUserServiceImpl implements ISysUserService {
 
         return new LoginVO()
                 .setToken(tokenService.generateToken(byUsername.getId()))
-                .setUserInfo(entityToMap(byUsername));
+                .setUserInfo(UserUtil.entityToMap(byUsername));
     }
 
     @Override
@@ -265,43 +198,14 @@ public class SysUserServiceImpl implements ISysUserService {
 
         return new LoginVO()
                 .setToken(tokenService.generateToken(by.getId()))
-                .setUserInfo(entityToMap(by));
+                .setUserInfo(UserUtil.entityToMap(by));
     }
 
     @Override
     public LoginVO securityLoginByPhoneAndPassword(String phone, String password) {
-
-        // 去除空格
-        phone = phone.trim();
-        password = password.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = phone.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-
-        // 解密密码
-        String[] split2 = password.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String password2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String password3 = rsa2.decryptStr(password2, KeyType.PrivateKey);
-        return loginByPhoneAndPassword(username3, password3);
+        String decryptPhone = kantbootRsaService.decrypt(phone);
+        String decryptPassword = kantbootRsaService.decrypt(password);
+        return loginByPhoneAndPassword(decryptPhone, decryptPassword);
     }
 
     @Override
@@ -331,42 +235,14 @@ public class SysUserServiceImpl implements ISysUserService {
         }
         return new LoginVO()
                 .setToken(tokenService.generateToken(by.getId()))
-                .setUserInfo(entityToMap(by));
+                .setUserInfo(UserUtil.entityToMap(by));
     }
 
     @Override
     public LoginVO securityLoginByEmailAndPassword(String email, String password) {
-        // 去除空格
-        email = email.trim();
-        password = password.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = email.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-
-        // 解密密码
-        String[] split2 = password.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String password2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String password3 = rsa2.decryptStr(password2, KeyType.PrivateKey);
-        return loginByEmailAndPassword(username3, password3);
+        String decryptEmail = kantbootRsaService.decrypt(email);
+        String decryptPassword = kantbootRsaService.decrypt(password);
+        return loginByEmailAndPassword(decryptEmail, decryptPassword);
     }
 
 
@@ -378,36 +254,9 @@ public class SysUserServiceImpl implements ISysUserService {
      */
     @Override
     public LoginVO securityLoginByEmailAndVarCode(String email, String varCode) {
-        // 去除空格
-        email = email.trim();
-        varCode = varCode.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = email.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-        // 解密验证码
-        String[] split2 = varCode.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String varCode2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String varCode3 = rsa2.decryptStr(varCode2, KeyType.PrivateKey);
-        return loginByEmailAndVarCode(username3, varCode3);
+        String decryptEmail = kantbootRsaService.decrypt(email);
+        String decryptVarCode = kantbootRsaService.decrypt(varCode);
+        return loginByEmailAndVarCode(decryptEmail, decryptVarCode);
     }
 
 
@@ -428,7 +277,7 @@ public class SysUserServiceImpl implements ISysUserService {
         if (by != null) {
             return new LoginVO()
                     .setToken(tokenService.generateToken(by.getId()))
-                    .setUserInfo(entityToMap(by));
+                    .setUserInfo(UserUtil.entityToMap(by));
         }
         // 用户不存在，创建用户
         SysUser sysUser = new SysUser();
@@ -443,41 +292,14 @@ public class SysUserServiceImpl implements ISysUserService {
         userRoleRepository.save(sysUserRole.setUserId(result.getId()));
         return new LoginVO()
                 .setToken(tokenService.generateToken(result.getId()))
-                .setUserInfo(entityToMap(resultSetRoleCode(result, defaultRoleCode)));
+                .setUserInfo(UserUtil.entityToMap(resultSetRoleCode(result, defaultRoleCode)));
     }
 
     @Override
     public LoginVO securityLoginBySmsAndVarCode(String phone, String varCode) {
-        // 去除空格
-        phone = phone.trim();
-        varCode = varCode.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = phone.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-        // 解密验证码
-        String[] split2 = varCode.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String varCode2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String varCode3 = rsa2.decryptStr(varCode2, KeyType.PrivateKey);
-        return loginBySmsAndVarCode(username3, varCode3);
+        String decryptPhone = kantbootRsaService.decrypt(phone);
+        String decryptVarCode = kantbootRsaService.decrypt(varCode);
+        return loginBySmsAndVarCode(decryptPhone, decryptVarCode);
     }
 
     /**
@@ -502,7 +324,7 @@ public class SysUserServiceImpl implements ISysUserService {
         if (by != null) {
             return new LoginVO()
                     .setToken(tokenService.generateToken(by.getId()))
-                    .setUserInfo(entityToMap(by));
+                    .setUserInfo(UserUtil.entityToMap(by));
         }
         // 用户不存在，创建用户
         SysUser sysUser = new SysUser();
@@ -517,7 +339,7 @@ public class SysUserServiceImpl implements ISysUserService {
         userRoleRepository.save(sysUserRole.setUserId(result.getId()));
         return new LoginVO()
                 .setToken(tokenService.generateToken(result.getId()))
-                .setUserInfo(entityToMap(resultSetRoleCode(result, defaultRoleCode)));
+                .setUserInfo(UserUtil.entityToMap(resultSetRoleCode(result, defaultRoleCode)));
     }
 
     @Override
@@ -580,7 +402,7 @@ public class SysUserServiceImpl implements ISysUserService {
 
         return new LoginVO()
                 .setToken(tokenService.generateToken(result.getId()))
-                .setUserInfo(entityToMap(sysUserVO));
+                .setUserInfo(UserUtil.entityToMap(sysUserVO));
     }
 
 
@@ -601,59 +423,12 @@ public class SysUserServiceImpl implements ISysUserService {
     @SneakyThrows
     @Override
     public String getRsaPublicKey() {
-        // 获取ip，用于限制请求次数
-        String ip = httpRequestHeaderUtil.getIp();
-        String s = redisUtil.get("rsa::requestCount:" + ip);
-        if (StrUtil.isBlank(s)) {
-            // 第一次请求，设置请求次数为0
-            redisUtil.setEx("rsa::requestCount:" + ip, "0", 2, TimeUnit.MINUTES);
-            s = "0";
-        }
-        // 获取请求次数
-        Integer requestCount = Integer.parseInt(redisUtil.get("rsa::requestCount:" + ip));
-        if (requestCount > 50) {
-            Thread.sleep(1000);
-        }
-        if (requestCount > 100) {
-            Thread.sleep(2000);
-        }
-        if (requestCount > 200) {
-            Thread.sleep(2000);
-        }
-        if (requestCount > 300) {
-            Thread.sleep(2000);
-        }
-        if (requestCount > 400) {
-            String redisLockKey = "res:lock:"+httpRequestHeaderUtil.getUserAgent()+":"+ httpRequestHeaderUtil.getIp();
-            // 获取锁
-            if(redisUtil.lock(redisLockKey, 10, TimeUnit.SECONDS)){
-                // 被占线，请稍后再试
-                throw BaseException.of("requestTooMany", "请求过于频繁，请稍后再试");
-            }
-            Thread.sleep(2000);
-        }
-
-        // 请求次数加一
-        redisUtil.setEx("rsa::requestCount:" + ip, String.valueOf(Integer.parseInt(s) + 1),100,
-                TimeUnit.SECONDS);
-
-
-        RSA rsa = new RSA();
-        String publicKeyBase64 = rsa.getPublicKeyBase64();
-        String privateKeyBase64 = rsa.getPrivateKeyBase64();
-        // 保存到 redis，30分钟过期
-        redisUtil.setEx("rsa::publicKey:" + publicKeyBase64, privateKeyBase64, 30, TimeUnit.MINUTES);
-        return publicKeyBase64;
+        return kantbootRsaService.generatePublicKey();
     }
 
     @Override
     public String getRsaPrivateKey(String publicKey) {
-        String result = redisUtil.get("rsa::publicKey:" + publicKey);
-        if (StrUtil.isBlank(result)) {
-            // 未找到私钥
-            throw BaseException.of("privateKeyNotFound", "未找到私钥");
-        }
-        return result;
+        return kantbootRsaService.getPrivateKeyByPublicKey(publicKey);
     }
 
     @Override
@@ -706,47 +481,20 @@ public class SysUserServiceImpl implements ISysUserService {
             byPhone = repository.save(byPhone);
             // 删除临时用户
             repository.deleteById(self.getId());
-            return entityToMap(byPhone);
+            return UserUtil.entityToMap(byPhone);
         }
 
         // 如果没绑定过手机号，就绑定
         self.setPhone(phone);
         self.setIsTemporary(false);
-        return entityToMap(repository.save(self));
+        return UserUtil.entityToMap(repository.save(self));
     }
 
     @Override
     public Map<String, Object> securityInitBindBySmsAndVarCode(String phone, String varCode) {
-        // 去除空格
-        phone = phone.trim();
-        varCode = varCode.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = phone.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-        // 解密验证码
-        String[] split2 = varCode.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String varCode2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String varCode3 = rsa2.decryptStr(varCode2, KeyType.PrivateKey);
-        return initBindBySmsAndVarCode(username3, varCode3);
+        String decryptPhone = kantbootRsaService.decrypt(phone);
+        String decryptVarCode = kantbootRsaService.decrypt(varCode);
+        return initBindBySmsAndVarCode(decryptPhone, decryptVarCode);
     }
 
     @Override
@@ -800,48 +548,21 @@ public class SysUserServiceImpl implements ISysUserService {
             byEmail = repository.save(byEmail);
             // 删除临时用户
             repository.deleteById(self.getId());
-            return entityToMap(byEmail);
+            return UserUtil.entityToMap(byEmail);
         }
 
         // 如果没绑定过邮箱，就绑定
         self.setEmail(email);
         // 设置为非临时用户
         self.setIsTemporary(false);
-        return entityToMap(repository.save(self));
+        return UserUtil.entityToMap(repository.save(self));
     }
 
     @Override
     public Map<String, Object> securityInitBindByEmailAndVarCode(String email, String varCode) {
-        // 去除空格
-        email = email.trim();
-        varCode = varCode.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = email.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-        // 解密验证码
-        String[] split2 = varCode.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String varCode2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String varCode3 = rsa2.decryptStr(varCode2, KeyType.PrivateKey);
-        return initBindByEmailAndVarCode(username3, varCode3);
+        String decryptEmail = kantbootRsaService.decrypt(email);
+        String decryptVarCode = kantbootRsaService.decrypt(varCode);
+        return initBindByEmailAndVarCode(decryptEmail, decryptVarCode);
     }
 
     /**
@@ -850,79 +571,18 @@ public class SysUserServiceImpl implements ISysUserService {
      * @param password 密码(加密)
      * @return
      */
-
-
     @Override
     public LoginVO securityLogin(String username, String password) {
-
-        // 去除空格
-        username = username.trim();
-        password = password.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = username.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-
-        // 解密密码
-        String[] split2 = password.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String password2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String password3 = rsa2.decryptStr(password2, KeyType.PrivateKey);
-
-        return login(username3, password3);
+        String decryptUsername = kantbootRsaService.decrypt(password);
+        String decryptPassword = kantbootRsaService.decrypt(username);
+        return login(decryptUsername, decryptPassword);
     }
 
     @Override
     public LoginVO securityRegister(String username, String password) {
-        // 去除空格
-        username = username.trim();
-        password = password.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = username.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-
-        // 解密密码
-        String[] split2 = password.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String password2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String password3 = rsa2.decryptStr(password2, KeyType.PrivateKey);
-
-        return register(username3, password3);
+        String decryptUsername = kantbootRsaService.decrypt(password);
+        String decryptPassword = kantbootRsaService.decrypt(username);
+        return register(decryptUsername, decryptPassword);
     }
 
     @Override
@@ -1000,6 +660,20 @@ public class SysUserServiceImpl implements ISysUserService {
     }
 
     @Override
+    public void removeRole(Long userId, List<String> roleCodes) {
+        List<SysUserRole> roleList = userRoleRepository.findNotAdminByUserId(userId);
+        List<SysUserRole> roleList2 = new ArrayList<>();
+        for (SysUserRole sysUserRole : roleList) {
+            for (String roleCode : roleCodes) {
+                if (sysUserRole.getRoleCode().equals(roleCode)) {
+                    roleList2.add(sysUserRole);
+                }
+            }
+        }
+        userRoleRepository.deleteAll(roleList2);
+    }
+
+    @Override
     public void setRole(Long userId, List<String> roleCodes) {
         List<SysUserRole> notAdminByUserId = userRoleRepository.findNotAdminByUserId(userId);
         List<SysUserRole> roleList = new ArrayList<>();
@@ -1071,6 +745,10 @@ public class SysUserServiceImpl implements ISysUserService {
     }
 
 
+    /**
+     * 用户初始化自己的信息
+     * @return
+     */
     @Override
     public Map<String,Object> initSelfInfo(SysUserInitInfoDTO dto) {
         SysUser newUser = repository.findById(getSelfId()).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
@@ -1107,18 +785,23 @@ public class SysUserServiceImpl implements ISysUserService {
         SysUser save = repository.save(newUser);
         SysUser result=BeanUtil.copyProperties(save, SysUser.class);
         result.setInviteUser(byDirectCode);
-        return entityToMap(result);
+        // 发送事件
+        UserInitEvent userInitEvent = new UserInitEvent(this, result);
+        applicationEventPublisher.publishEvent(userInitEvent);
+        return UserUtil.entityToMap(result);
     }
 
     @Override
     public PageResult getBodyData(PageParam<SysUserSearchDTO> pageParam){
+        // 开始时间
+        long startTime = System.currentTimeMillis();
         Page<SysUser> bodyData = repository.getBodyData(pageParam.getData(), pageParam.getPageable());
-        List<Map<String, Object>> mapList = new ArrayList<>();
-        bodyData.getContent().forEach(item->{
-            mapList.add(entityToMap(item));
-        });
+        List<Map<String, Object>> mapList = UserUtil.entityListToMap(bodyData.getContent());
         PageResult pageResult = PageResult.of(bodyData);
         pageResult.setContent(mapList);
+        // 结束时间
+        long endTime = System.currentTimeMillis();
+        log.info("查询用户列表耗时：{}ms", endTime - startTime);
         return pageResult;
     }
 
@@ -1171,51 +854,15 @@ public class SysUserServiceImpl implements ISysUserService {
         userRoleRepository.save(sysUserRole);
         return new LoginVO()
                 .setToken(tokenService.generateToken(result.getId()))
-                .setUserInfo(entityToMap(resultSetRoleCode(result, defaultRoleCode)));
+                .setUserInfo(UserUtil.entityToMap(resultSetRoleCode(result, defaultRoleCode)));
     }
 
     @Override
     public LoginVO securityPhoneRegisterWithVarCode(String phone, String password, String varCode) {
-        phone = phone.trim();
-        password = password.trim();
-        varCode = varCode.trim();
-        // 获取密钥和密码部分，用“&&”分割
-        String[] split = phone.split("&&");
-        if (split.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey = split[0];
-        String username2 = split[1];
-        // 获取私钥
-        String privateKey = getRsaPrivateKey(publicKey);
-        // 解密用户名
-        RSA rsa = new RSA(privateKey, publicKey);
-        String username3 = rsa.decryptStr(username2, KeyType.PrivateKey);
-        String[] split2 = password.split("&&");
-        if (split2.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey2 = split2[0];
-        String password2 = split2[1];
-        // 获取私钥
-        String privateKey2 = getRsaPrivateKey(publicKey2);
-        // 解密密码
-        RSA rsa2 = new RSA(privateKey2, publicKey2);
-        String password3 = rsa2.decryptStr(password2, KeyType.PrivateKey);
-        String[] split3 = varCode.split("&&");
-        if (split3.length != 2) {
-            // 密钥错误
-            throw BaseException.of("keyError", "密钥错误");
-        }
-        String publicKey3 = split3[0];
-        String varCode2 = split3[1];
-        // 获取私钥
-        String privateKey3 = getRsaPrivateKey(publicKey3);
-        // 解密验证码
-        String varCode3 = new RSA(privateKey3, publicKey3).decryptStr(varCode2, KeyType.PrivateKey);
-        return phoneRegisterWithVarCode(username3, password3, varCode3);
+        String decryptPhone = kantbootRsaService.decrypt(phone);
+        String decryptPassword = kantbootRsaService.decrypt(password);
+        String decryptVarCode = kantbootRsaService.decrypt(varCode);
+        return phoneRegisterWithVarCode(decryptPhone, decryptPassword, decryptVarCode);
     }
 
 
@@ -1228,7 +875,7 @@ public class SysUserServiceImpl implements ISysUserService {
         SysUser sysUser = repository.findById(userIdByToken).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
         sysUser.setDirectCode(str);
         SysUser save = repository.save(sysUser);
-        return entityToMap(save);
+        return UserUtil.entityToMap(save);
     }
 
 
@@ -1240,7 +887,17 @@ public class SysUserServiceImpl implements ISysUserService {
         SysUser sysUser = repository.findById(userIdByToken).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
         sysUser.setWechat(wechat);
         SysUser save = repository.save(sysUser);
-        return entityToMap(save);
+        return UserUtil.entityToMap(save);
+    }
+
+    @Override
+    public void logout() {
+        String token = tokenService.getSelfToken();
+        redisUtil.delete("sysToken::getUserId:" + token);
+        SysToken byToken = tokenRepository.findByToken(token);
+        if(byToken!=null){
+            tokenRepository.delete(byToken);
+        }
     }
 
     @Override
@@ -1312,6 +969,6 @@ public class SysUserServiceImpl implements ISysUserService {
 
         save = repository.save(save);
 
-        return entityToMap(save);
+        return UserUtil.entityToMap(save);
     }
 }

@@ -219,6 +219,11 @@ public interface ISysUserService {
     void addRole(Long userId, List<String> roleCodes);
 
     /**
+     * 给用户取消角色
+     */
+    void removeRole(Long userId, List<String> roleCodes);
+
+    /**
      * 给用户设置角色
      */
     void setRole(Long userId, List<String> roleCodes);
@@ -266,6 +271,11 @@ public interface ISysUserService {
      * 生成微信号
      */
     Map<String,Object> setWechat(String wechat);
+
+    /**
+     * 退出登录
+     */
+    void logout();
 
 
     // TODO 只针对那个dtu项目的修改与保存

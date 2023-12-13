@@ -42,6 +42,17 @@ public class SysUserControllerOfAdmin extends BaseAdminController<SysUser,Long> 
     }
 
     /**
+     * 给用户删除角色
+     */
+    @PostMapping("/removeRole")
+    public RestResult<Object> removeRole(
+            @RequestParam("userId") Long userId,
+            @RequestParam("roleCodes") List<String> roleCodes) {
+        service.removeRole(userId,roleCodes);
+        return RestResult.success(null,"deleteSuccess","删除成功");
+    }
+
+    /**
      * 给用户设置角色
      * @param userId 用户id
      * @param roleCodes 角色code列表

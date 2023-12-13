@@ -320,6 +320,15 @@ public class SysUserController {
     }
 
     /**
+     * 退出登录
+     */
+    @PostMapping("/logout")
+    public RestResult logout() {
+        service.logout();
+        return RestResult.success(null,"logoutSuccess","退出成功");
+    }
+
+    /**
      * 设置微信号
      */
     @PostMapping("/setWechat")

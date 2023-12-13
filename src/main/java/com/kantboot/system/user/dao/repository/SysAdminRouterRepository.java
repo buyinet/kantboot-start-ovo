@@ -26,6 +26,7 @@ public interface SysAdminRouterRepository extends JpaRepository<SysAdminRouter,L
         FROM SysAdminRouter r
         WHERE r.permissionCode IN (:permissionCodeList)
         AND (r.parentCode IS NULL OR r.parentCode = '')
+        ORDER BY r.priority DESC
     """)
     List<SysAdminRouter> getByPermissionCodeList(@Param("permissionCodeList") List<String> permissionCodeList);
 
