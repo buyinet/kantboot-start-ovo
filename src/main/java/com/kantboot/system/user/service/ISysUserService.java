@@ -42,7 +42,12 @@ public interface ISysUserService {
     /**
      * 获取自己的信息
      */
-    Map<String,Object> getSelf();
+    Map<String,Object> getSelfMap();
+
+    /**
+     * 获取自己的信息
+     */
+    SysUser getSelf();
 
     Long getSelfId();
 

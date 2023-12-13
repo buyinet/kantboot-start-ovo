@@ -26,7 +26,7 @@ public class SysUserController {
      */
     @PostMapping("/getSelf")
     public RestResult<Map<String,Object>> getSelf(){
-        return RestResult.success(service.getSelf(),"getSuccess","获取成功");
+        return RestResult.success(service.getSelfMap(),"getSuccess","获取成功");
     }
 
     /**

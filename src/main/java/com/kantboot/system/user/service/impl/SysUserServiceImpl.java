@@ -125,7 +125,7 @@ public class SysUserServiceImpl implements ISysUserService {
     }
 
     @Override
-    public Map<String, Object> getSelf() {
+    public Map<String, Object> getSelfMap() {
         String selfToken = tokenService.getSelfToken();
         Long userIdByToken = tokenService.getUserIdByToken(selfToken);
         Map<String, Object> result = getById(userIdByToken);
@@ -137,6 +137,13 @@ public class SysUserServiceImpl implements ISysUserService {
         }
         result.put("permissionCodes", permissionCodes);
         return result;
+    }
+
+    @Override
+    public SysUser getSelf() {
+        String selfToken = tokenService.getSelfToken();
+        Long userIdByToken = tokenService.getUserIdByToken(selfToken);
+        return repository.findById(userIdByToken).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
     }
 
     @Override
@@ -348,7 +355,7 @@ public class SysUserServiceImpl implements ISysUserService {
         SysUser sysUser = repository.findById(selfId).orElseThrow(() -> BaseException.of("notLogin", "未登录"));
         sysUser.setIsTemporary(false);
         repository.save(sysUser);
-        return getSelf();
+        return getSelfMap();
     }
 
     @Override

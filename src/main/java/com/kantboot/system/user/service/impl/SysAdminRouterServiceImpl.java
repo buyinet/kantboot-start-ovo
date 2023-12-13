@@ -35,7 +35,7 @@ public class SysAdminRouterServiceImpl implements ISysAdminRouterService
 
     @Override
     public List<SysAdminRouter> getSelf() {
-        Map<String, Object> self = userService.getSelf();
+        Map<String, Object> self = userService.getSelfMap();
         List<String> permissionCodes = JSON.parseArray(JSON.toJSONString(self.get("permissionCodes")), String.class);
         List<SysAdminRouter> byPermissionCodeList = repository.getByPermissionCodeList(permissionCodes);
         List<SysAdminRouter> result = new ArrayList<>();
