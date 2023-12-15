@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * 用户DAO
  * @author 方某方
@@ -49,5 +51,15 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long> {
      * 根据直属码查询用户
      */
     SysUser findByDirectCode(String directCode);
+
+    /**
+     * 根据组织id查询所有用户
+     */
+    @Query("""
+    FROM SysUser t
+    LEFT JOIN RelSysUserAndSysOrg t2 ON t.id = t2.userId
+    WHERE t2.orgId = :orgId
+    """)
+    List<SysUser> findListByOrgId(@Param("orgId") Long orgId);
 
 }

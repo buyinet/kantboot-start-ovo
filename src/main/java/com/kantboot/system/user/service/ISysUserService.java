@@ -20,6 +20,11 @@ import java.util.Map;
 public interface ISysUserService {
 
     /**
+     * 根据组织id获取用户列表
+     */
+    List<SysUser> getListByOrgId(Long orgId);
+
+    /**
      * 获取默认角色编码
      * @return 默认角色编码
      */

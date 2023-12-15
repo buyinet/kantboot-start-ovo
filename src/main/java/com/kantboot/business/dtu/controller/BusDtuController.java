@@ -24,7 +24,9 @@ public class BusDtuController {
     }
 
     @RequestMapping("/addDtu")
-    public RestResult<BusDtu> addDtu(BusDtu dtu) {
+    public RestResult<BusDtu> addDtu(
+            @RequestBody
+            BusDtu dtu) {
         return RestResult.success(service.addDtu(dtu),"addSuccess","添加成功");
     }
 

@@ -10,6 +10,21 @@ springdoc:
     enabled: true
 
 spring:
+  #MQTT配置信息
+  mqtt:
+    #MQTT服务端地址，端口默认为1883，如果有多个，用逗号隔开
+    url: tcp://182.85.254.44:1883
+    #用户名
+    username: admin
+    #密码
+    password: 123456
+    #客户端id（不能重复）
+    client:
+      id: consumer-id
+    #MQTT默认的消息推送主题，实际可在调用接口时指定
+    default:
+      topic: topic
+
   servlet:
     multipart:
       max-file-size: 100MB

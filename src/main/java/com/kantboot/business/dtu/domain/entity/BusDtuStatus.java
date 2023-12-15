@@ -1,11 +1,13 @@
 package com.kantboot.business.dtu.domain.entity;
 
+import com.kantboot.util.core.jpa.KantbootGenerationType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.GenericGenerator;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -15,7 +17,7 @@ import java.util.Date;
 @Entity
 @Getter
 @Setter
-@Table(name = "bus_dtu")
+@Table(name = "bus_dtu_status")
 @Accessors(chain = true)
 @EntityListeners(AuditingEntityListener.class)
 @DynamicUpdate
@@ -24,9 +26,22 @@ public class BusDtuStatus {
 
     /**
      * 主键
-     * IMEI
      */
     @Id
+    @GenericGenerator(name = "snowflakeId",strategy = KantbootGenerationType.SNOWFLAKE)
+    @GeneratedValue(generator = "snowflakeId")
+    @Column(name = "id")
+    private Long id;
+
+    /**
+     * md5
+     */
+    @Column(name = "md5",length = 64)
+    private String md5;
+
+    /**
+     * IMEI
+     */
     @Column(name = "imei",length = 64)
     private String imei;
 
@@ -237,6 +252,8 @@ public class BusDtuStatus {
 
     /**
      * 输出状态指示
+     * 0 未合闸
+     * 1 合闸
      */
     @Column(name = "output_status_indication")
     private Long outputStatusIndication;
@@ -346,4 +363,5 @@ public class BusDtuStatus {
                 ", 雷击单次屏蔽时间=" + lightningStrikeSingleTimeShieldTime +
                 '}';
     }
+
 }

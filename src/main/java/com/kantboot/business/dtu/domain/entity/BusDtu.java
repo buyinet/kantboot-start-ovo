@@ -2,12 +2,15 @@ package com.kantboot.business.dtu.domain.entity;
 
 
 import com.kantboot.system.user.domain.entity.SysOrg;
+import com.kantboot.system.user.domain.entity.SysUser;
+import com.kantboot.util.core.jpa.KantbootGenerationType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.GenericGenerator;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -28,6 +31,14 @@ public class BusDtu {
      * 主键
      */
     @Id
+    @GenericGenerator(name = "snowflakeId",strategy = KantbootGenerationType.SNOWFLAKE)
+    @GeneratedValue(generator = "snowflakeId")
+    @Column(name = "id")
+    private Long id;
+
+    /**
+     * 主键
+     */
     @Column(name = "imei",length = 64)
     private String imei;
 
@@ -51,22 +62,42 @@ public class BusDtu {
     private String address;
 
     /**
+     * 详细地址
+     */
+    @Column(name = "detail_address")
+    private String detailAddress;
+
+    /**
      * 经度
      */
     @Column(name = "longitude")
-    private String longitude;
+    private Double longitude;
 
     /**
      * 纬度
      */
     @Column(name = "latitude")
-    private String latitude;
+    private Double latitude;
 
     /**
      * 图片的文件id
      */
     @Column(name = "file_id_of_image")
     private String fileIdOfImage;
+
+    /**
+     * 安装的用户id
+     */
+    @Column(name = "user_id_of_install")
+    private Long userIdOfInstall;
+
+    /**
+     * 安装的用户
+     */
+    @OneToOne
+    @JoinColumn(name = "user_id_of_install",referencedColumnName = "id",insertable = false,updatable = false)
+    private SysUser userOfInstall;
+
 
 
     /**
@@ -89,6 +120,12 @@ public class BusDtu {
     @Column(name = "org_id")
     private Long orgId;
 
+    /**
+     * 是否初始化
+     */
+    @Column(name = "is_init")
+    private Boolean isInit;
+
     @OneToOne
     @JoinColumn(name = "org_id",referencedColumnName = "id",insertable = false,updatable = false)
     private SysOrg org;
@@ -97,7 +134,7 @@ public class BusDtu {
      * 设备状态
      */
     @OneToOne(cascade = CascadeType.ALL)
-    @JoinColumn(name = "imei",referencedColumnName = "imei")
+    @JoinColumn(name = "imei",referencedColumnName = "imei",insertable = false,updatable = false)
     private BusDtuStatus status;
 
 }

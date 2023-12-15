@@ -16,6 +16,11 @@ public interface IBusDtuService {
     List<BusDtu> getSelfDtu();
 
     /**
+     * 初始化DTU
+     */
+    void initDtu(BusDtu dtu);
+
+    /**
      * 添加DTU
      */
     BusDtu addDtu(BusDtu dtu);

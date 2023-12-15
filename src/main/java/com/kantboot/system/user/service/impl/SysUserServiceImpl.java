@@ -97,6 +97,10 @@ public class SysUserServiceImpl implements ISysUserService {
     private ICommonKantbootRsaService kantbootRsaService;
 
 
+    @Override
+    public List<SysUser> getListByOrgId(Long orgId) {
+        return repository.findListByOrgId(orgId);
+    }
 
     @Override
     public String getDefaultRoleCode() {
